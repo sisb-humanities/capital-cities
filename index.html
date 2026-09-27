@@ -181,6 +181,16 @@
   }
   .goal svg { width: 20px; height: 20px; }
   .brief-note { margin: 0; color: var(--muted); font-weight: 600; font-size: 16px; }
+  .mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(255,255,255,.18); border-radius: 22px; padding: 6px; }
+  .mode button {
+    border: 0; border-radius: 17px; background: transparent; color: #fff;
+    font-weight: 800; font-size: clamp(17px, 3.8vw, 21px); line-height: 1.1;
+    padding: 10px 8px 7px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .mode button svg { width: 28px; height: 28px; flex: none; }
+  .mode button small { display: block; font-weight: 600; font-size: 13px; opacity: .85; }
+  .mode button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 rgba(12,30,90,.3); }
+  .mode-text { text-align: left; }
   .brief-go { display: flex; justify-content: center; padding-bottom: 8px; }
   .brief-go .btn-big { min-width: 60%; font-size: clamp(28px, 6vw, 38px); }
 
@@ -343,6 +353,7 @@
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="2.6" d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5"/></symbol>
   <symbol id="i-crown" viewBox="0 0 24 24"><path fill="#FFC928" stroke="#1B2548" stroke-width="1.6" stroke-linejoin="round" d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.9 1.9M17.5 17.5l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.9-1.9M17.5 6.5l1.9-1.9"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round" d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5v13"/></symbol>
   <symbol id="i-ear" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M7 9a5 5 0 1 1 10 0c0 3-3 3.5-3 6.5a2.5 2.5 0 0 1-5 0M10 9.5a2 2 0 1 1 4 0"/></symbol>
 </svg>
 
@@ -374,6 +385,10 @@
       <div class="boss-flags flag" id="bossFlags" hidden></div>
       <p class="brief-note" id="briefNote"></p>
       <div class="goal" id="goal"></div>
+    </div>
+    <div class="mode" role="group" aria-label="How to play">
+      <button type="button" id="modeListen" aria-pressed="true"><svg><use href="#i-ear"/></svg><span class="mode-text">Read to me<small>Clock waits for the voice</small></span></button>
+      <button type="button" id="modeSelf" aria-pressed="false"><svg><use href="#i-book"/></svg><span class="mode-text">I'll read it<small>No voice, clock keeps going</small></span></button>
     </div>
     <div class="brief-go"><button type="button" class="btn-big" id="briefPlay">Play!<svg class="i"><use href="#i-arrow"/></svg></button></div>
   </section>
@@ -430,8 +445,8 @@
   <div class="grown-card" role="dialog" aria-labelledby="grownTitle">
     <h2 id="grownTitle">Grown-ups</h2>
     <button type="button" class="switch" id="swSound" aria-pressed="true">Sound and voice<span class="knob"></span></button>
-    <button type="button" class="switch" id="swRead" aria-pressed="true">Read the answers out loud<span class="knob"></span></button>
-    <p>Turn reading off once your child can read the city names. The clock always stops while the voice is talking.</p>
+    <button type="button" class="switch" id="swRead" aria-pressed="false">I'll read it myself<span class="knob"></span></button>
+    <p>With "I'll read it myself" on, nothing is read aloud before each question, the answers can be tapped straight away, and the clock never stops. Your child can switch this on each level's start screen too. Stars are shared between both ways of playing.</p>
     <button type="button" class="plain-btn" id="unlockAll">Unlock every level</button>
     <button type="button" class="plain-btn danger" id="resetAll">Reset all stars</button>
     <button type="button" class="btn-big sky" id="grownClose">Done</button>
@@ -695,7 +710,8 @@ VU|Vanuatu|Port Vila|3|O`;
     set(k, v) { try { localStorage.setItem('cq2-' + k, JSON.stringify(v)); } catch (e) {} }
   };
   const progress = Object.assign({ stars: {}, unlockAll: false }, store.get('progress', {}));
-  const settings = Object.assign({ sound: true, readAnswers: true }, store.get('settings', {}));
+  const settings = Object.assign({ sound: true, selfRead: false }, store.get('settings', {}));
+  delete settings.readAnswers;
   const saveProgress = () => store.set('progress', progress);
   const saveSettings = () => store.set('settings', settings);
   const starsOf = l => progress.stars[l.id] || 0;
@@ -829,9 +845,16 @@ VU|Vanuatu|Port Vila|3|O`;
 
   // ---------- BRIEF ----------
   let briefLevel = null;
+  function briefNoteText(l) {
+    const t1 = l.targets[0];
+    return (!l.boss && l.review.length ? 'Plus some you know already. ' : '')
+      + l.time + ' seconds and 3 hearts. Get ' + t1 + (l.boss ? ' right to win.' : ' right to pass.')
+      + (settings.selfRead ? ' The clock keeps going the whole time!' : '');
+  }
   function openBrief(l) {
     briefLevel = l;
     stopSpeech();
+    syncMode();
     const w = WORLDS[l.wi];
     $('brief').style.setProperty('--wc', w.col);
     $('briefWorld').textContent = w.name;
@@ -844,9 +867,9 @@ VU|Vanuatu|Port Vila|3|O`;
       $('briefSub').textContent = 'Every capital in ' + w.name;
       meet.hidden = true; bf.hidden = false;
       bf.textContent = l.fresh.map(c => BY[c].flag).join(' ');
-      $('briefNote').textContent = l.time + ' seconds and 3 hearts. Get ' + t1 + ' right to win.';
+      $('briefNote').textContent = briefNoteText(l);
       show('brief');
-      say('Boss level! Every capital in ' + w.name + '. Get ' + t1 + ' right to win!');
+      if (!settings.selfRead) say('Boss level! Every capital in ' + w.name + '. Get ' + t1 + ' right to win!');
     } else {
       $('briefSub').textContent = 'Meet these capitals';
       meet.hidden = false; bf.hidden = true;
@@ -862,7 +885,7 @@ VU|Vanuatu|Port Vila|3|O`;
         meet.appendChild(b);
         return { b, c };
       });
-      $('briefNote').textContent = (l.review.length ? 'Plus some you know already. ' : '') + l.time + ' seconds and 3 hearts. Get ' + t1 + ' right to pass.';
+      $('briefNote').textContent = briefNoteText(l);
       show('brief');
       $('briefCard').scrollTop = 0;
       const items = cards.map(({ b, c }) => ({
@@ -870,9 +893,21 @@ VU|Vanuatu|Port Vila|3|O`;
         gap: 350,
         on: () => { cards.forEach(x => x.b.classList.remove('speaking')); b.classList.add('speaking'); }
       }));
-      speakSeq(items, () => cards.forEach(x => x.b.classList.remove('speaking')));
+      if (!settings.selfRead) speakSeq(items, () => cards.forEach(x => x.b.classList.remove('speaking')));
     }
   }
+  function syncMode() {
+    $('modeListen').setAttribute('aria-pressed', String(!settings.selfRead));
+    $('modeSelf').setAttribute('aria-pressed', String(settings.selfRead));
+  }
+  function setMode(self) {
+    if (settings.selfRead === self) return;
+    settings.selfRead = self; saveSettings(); syncMode(); sfx.tap();
+    if (self) stopSpeech(); else say('I will read the questions to you.');
+    if (briefLevel) $('briefNote').textContent = briefNoteText(briefLevel);
+  }
+  $('modeListen').onclick = () => setMode(false);
+  $('modeSelf').onclick = () => setMode(true);
   $('briefBack').onclick = goMap;
   $('briefPlay').onclick = () => { if (briefLevel) startLevel(briefLevel); };
 
@@ -893,7 +928,7 @@ VU|Vanuatu|Port Vila|3|O`;
     $('lvlTag').textContent = l.boss ? 'Boss' : 'Level ' + l.num;
     const pool = l.fresh.map(code => ({ code, w: l.boss ? 1 : 3 }));
     shuffle(l.review.slice()).slice(0, 4).forEach(code => pool.push({ code, w: 1 }));
-    G = { level: l, pool, hearts: 3, correct: 0, remaining: l.time * 1000, phase: 'reading', cur: null, opts: [], qn: 0, retry: [], lastCode: null, lastWhole: null, prePause: null };
+    G = { level: l, pool, hearts: 3, correct: 0, remaining: l.time * 1000, phase: 'reading', cur: null, opts: [], qn: 0, retry: [], lastCode: null, lastWhole: null, prePause: null, selfRead: settings.selfRead };
     // star bar markers
     const tr = $('sbTrack');
     tr.querySelectorAll('.sb-mark').forEach(m => m.remove());
@@ -979,6 +1014,19 @@ VU|Vanuatu|Port Vila|3|O`;
     readQuestion();
   }
   function readQuestion() {
+    if (G.selfRead) {
+      // No voice; clock runs. Brief lock so a double-tap can't answer the next question by accident.
+      const btns = [...$('options').children];
+      btns.forEach(b => b.classList.remove('reading'));
+      $('listen').hidden = true;
+      G.phase = 'ask';
+      G.lockUntil = performance.now() + 400;
+      btns.forEach(b => b.classList.add('locked'));
+      const q = G.qn;
+      setTimeout(() => { if (G && G.qn === q) btns.forEach(b => b.classList.remove('locked')); }, 400);
+      drawRing();
+      return;
+    }
     G.phase = 'reading';
     const btns = [...$('options').children];
     btns.forEach(b => { b.classList.add('locked'); b.classList.remove('reading'); });
@@ -986,7 +1034,7 @@ VU|Vanuatu|Port Vila|3|O`;
     drawRing();
     const c = G.cur;
     const items = [{ text: "What's the capital of " + c.spoken + '?', gap: 300 }];
-    if (settings.readAnswers) {
+    {
       G.opts.forEach((o, i) => {
         const last = i === G.opts.length - 1;
         items.push({ text: (last ? 'or ' : '') + o.capital + '?', gap: 220, on: () => { btns.forEach(b => b.classList.remove('reading')); btns[i].classList.add('reading'); } });
@@ -1004,6 +1052,7 @@ VU|Vanuatu|Port Vila|3|O`;
   const PRAISE = ['Yes!', 'Great!', 'Brilliant!', 'Well done!', 'Super!', 'You got it!'];
   function choose(i) {
     if (!G || G.phase !== 'ask') return;
+    if (G.selfRead && performance.now() < (G.lockUntil || 0)) return;
     G.phase = 'feedback';
     drawRing();
     const btns = [...$('options').children];
@@ -1018,8 +1067,8 @@ VU|Vanuatu|Port Vila|3|O`;
       G.correct++;
       sfx.good(); confetti();
       updateStarbar();
-      minShow = 900;
-      words = PRAISE[Math.floor(Math.random() * PRAISE.length)] + ' ' + c.capital + '!';
+      minShow = G.selfRead ? 600 : 900;
+      words = G.selfRead ? null : PRAISE[Math.floor(Math.random() * PRAISE.length)] + ' ' + c.capital + '!';
     } else {
       btns[i].classList.add('wrong');
       btns[rightIdx].classList.add('right', 'reveal');
@@ -1028,11 +1077,12 @@ VU|Vanuatu|Port Vila|3|O`;
       renderHearts(G.hearts);
       sfx.wrong();
       G.retry.push({ code: c.code, due: G.qn + 2 });
-      minShow = 2000;
+      minShow = G.selfRead ? 1500 : 2000;
       words = 'Oops! The capital of ' + c.spoken + ' is ' + c.capital + '.';
     }
     const q = G.qn;
-    say(words, () => {
+    const afterWords = words ? (fn => say(words, fn)) : (fn => fn());
+    afterWords(() => {
       if (!G || G.phase !== 'feedback' || G.qn !== q) return;
       const wait = Math.max(0, minShow - (performance.now() - t0));
       feedbackTimer = setTimeout(() => {
@@ -1050,14 +1100,15 @@ VU|Vanuatu|Port Vila|3|O`;
     const secs = Math.ceil(Math.max(0, G.remaining) / 1000);
     $('secs').textContent = secs;
     const ring = $('ring');
-    ring.classList.toggle('held', G.phase !== 'ask');
-    ring.classList.toggle('hurry', G.phase === 'ask' && secs <= 5 && secs > 0);
+    const running = G.phase === 'ask' || (G.selfRead && G.phase === 'feedback');
+    ring.classList.toggle('held', !running);
+    ring.classList.toggle('hurry', running && secs <= 5 && secs > 0);
   }
   let lastT = 0;
   function frame(t) {
     const dt = Math.min(250, t - (lastT || t));
     lastT = t;
-    if (G && G.phase === 'ask') {
+    if (G && (G.phase === 'ask' || (G.selfRead && G.phase === 'feedback'))) {
       G.remaining -= dt;
       const whole = Math.ceil(G.remaining / 1000);
       if (whole !== G.lastWhole) { if (whole <= 5 && whole > 0) sfx.tick(); G.lastWhole = whole; }
@@ -1151,7 +1202,11 @@ VU|Vanuatu|Port Vila|3|O`;
   $('gameBack').onclick = goMap;
   $('ring').onclick = pause;
   $('pauseOv').onclick = resume;
-  $('hear').onclick = () => { if (G && G.phase === 'ask') readQuestion(); };
+  $('hear').onclick = () => {
+    if (!G || G.phase !== 'ask') return;
+    if (G.selfRead) say("What's the capital of " + G.cur.spoken + '?');
+    else readQuestion();
+  };
   $('resMap').onclick = goMap;
   $('resRetry').onclick = () => { if (G) startLevel(G.level); };
   $('resNext').onclick = () => { const n = G && LEVELS[G.level.index + 1]; if (n) { $('resultOv').hidden = true; openBrief(n); } };
@@ -1165,13 +1220,13 @@ VU|Vanuatu|Port Vila|3|O`;
   // grown-ups panel
   function syncSwitches() {
     $('swSound').setAttribute('aria-pressed', String(settings.sound));
-    $('swRead').setAttribute('aria-pressed', String(settings.readAnswers));
+    $('swRead').setAttribute('aria-pressed', String(settings.selfRead));
     $('unlockAll').textContent = progress.unlockAll ? 'Lock levels again (normal play)' : 'Unlock every level';
   }
   $('gear').onclick = () => { syncSwitches(); $('grownOv').hidden = false; };
   $('grownClose').onclick = () => { $('grownOv').hidden = true; disarm(); renderMap(); };
   $('swSound').onclick = () => { settings.sound = !settings.sound; if (!settings.sound) stopSpeech(); saveSettings(); syncSwitches(); };
-  $('swRead').onclick = () => { settings.readAnswers = !settings.readAnswers; saveSettings(); syncSwitches(); };
+  $('swRead').onclick = () => { settings.selfRead = !settings.selfRead; saveSettings(); syncSwitches(); syncMode(); };
   $('unlockAll').onclick = () => { progress.unlockAll = !progress.unlockAll; saveProgress(); syncSwitches(); };
   let armTimer = null;
   function disarm() { clearTimeout(armTimer); const b = $('resetAll'); b.classList.remove('armed'); b.textContent = 'Reset all stars'; }
